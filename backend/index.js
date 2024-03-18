@@ -1,6 +1,9 @@
 // Module Imports
 const express = require("express");
-const path = require('path')
+const dotenv = require("dotenv");
+dotenv.config({ path: "./config/.env" });
+const path = require('path');
+const cloudinary = require("cloudinary").v2;
 // const cors = require("cors");
 
 const morgan = require("morgan");
@@ -15,19 +18,34 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan("combined"));
 app.use(fileUpload({ limits: { fileSize: 50 * 1024 * 1024 } }));
 
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+
 const VideoProcessing = require('./service/VedioProcessing');
+const Image_Processing_Service = require('./service/ImageProcessingService');
+
 app.post('/file/upload', async (req, res, next) => {
 
     try {
-        if (!req.files || !req.files.vdo) {
+        if (!req.files || !req.files.uploadFile) {
             return res.status(400).send('No video uploaded');
         }
 
-        const videoFile = req.files.vdo;
-        const thumbnailPath = path.join(__dirname, '/public', 'thumbnail.png');; // Path for the generated thumbnail
+        const response = await Image_Processing_Service(req.files.uploadFile)
 
-        await VideoProcessing.generateThumbnail(videoFile, thumbnailPath);
-        res.send('Thumbnail generated successfully');
+        console.log(response)
+        // const videoFile = req.files.vdo;
+        // const thumbnailPath = path.join(__dirname, '/public', 'thumbnail.png'); // Path for the generated thumbnail
+
+        // await VideoProcessing.generateThumbnail(videoFile, thumbnailPath);
+        res.status(200).json({
+            success: true,
+            message: 'Processed Files',
+            data: response
+        });
     } catch (error) {
         console.error('Error uploading file:', error);
         res.status(500).send('Internal server error');
