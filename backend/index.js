@@ -24,8 +24,7 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET,
   });
 
-const VideoProcessing = require('./service/VedioProcessing');
-const Image_Processing_Service = require('./service/ImageProcessingService');
+const file_Processing_Service = require('./service/fileProcessing/ImageProcessingService');
 
 app.post('/file/upload', async (req, res, next) => {
 
@@ -34,13 +33,10 @@ app.post('/file/upload', async (req, res, next) => {
             return res.status(400).send('No video uploaded');
         }
 
-        const response = await Image_Processing_Service(req.files.uploadFile)
+        const response = await file_Processing_Service(req.files.uploadFile, 'n8vt8vbbyv8')
 
         console.log(response)
-        // const videoFile = req.files.vdo;
-        // const thumbnailPath = path.join(__dirname, '/public', 'thumbnail.png'); // Path for the generated thumbnail
 
-        // await VideoProcessing.generateThumbnail(videoFile, thumbnailPath);
         res.status(200).json({
             success: true,
             message: 'Processed Files',

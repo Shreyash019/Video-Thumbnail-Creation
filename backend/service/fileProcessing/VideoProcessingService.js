@@ -5,6 +5,7 @@ const path = require('path');
 ffmpeg.setFfmpegPath('C:\\ffmpeg-2024-03-11-git-3d1860ec8d-full_build\\bin\\ffmpeg.exe');
 ffmpeg.setFfprobePath('C:\\ffmpeg-2024-03-11-git-3d1860ec8d-full_build\\bin\\ffprobe.exe');
 
+// Video Upload To Cloud Service
 const cloud_Video_Uploader = async (files, folder = 'temporary') => {
     try {
         if (!files || files.length === 0) {
@@ -39,6 +40,7 @@ const cloud_Video_Uploader = async (files, folder = 'temporary') => {
     }
 }
 
+// Function For Getting Video Dimensions
 const getVideoDimensions = async (videoUrl) => {
     return new Promise((resolve, reject) => {
         ffmpeg.ffprobe(videoUrl, (err, metadata) => {
@@ -53,6 +55,7 @@ const getVideoDimensions = async (videoUrl) => {
     });
 };
 
+// Function For Getting  Video Duration
 const getVideoDuration = (videoUrl) => {
     return new Promise((resolve, reject) => {
         ffmpeg.ffprobe(videoUrl, (err, metadata) => {
@@ -66,7 +69,8 @@ const getVideoDuration = (videoUrl) => {
     });
 };
 
-const cloud_Thumbnail_Generator = async (videoUrl) => {
+// Function For Generating Thumbnail For Video
+const cloud_Thumbnail_Generator = async (videoUrl, folder = 'socio', user = 'temporary', timeFrame = 1) => {
     try {
 
         // Get video dimensions
@@ -74,9 +78,8 @@ const cloud_Thumbnail_Generator = async (videoUrl) => {
         // Fetch video duration
         const videoDuration = await getVideoDuration(videoUrl);
 
-        // Calculate the time offset for 10% of the video duration
-        const timeOffset = videoDuration * 0.5;
-        console.log(timeOffset)
+        // Calculate the time offset for the video duration
+        const timeOffset = timeFrame !== 1 ? timeFrame : videoDuration ? videoDuration * 0.5 : 1;
 
         // Define output folder for the thumbnail
         const outputFolder = path.resolve(__dirname, 'public');
@@ -86,9 +89,7 @@ const cloud_Thumbnail_Generator = async (videoUrl) => {
             fs.mkdirSync(outputFolder, { recursive: true });
         }
 
-        console.log('Inside try block', videoUrl);
-        const thumbnailPath = path.join(outputFolder, 'thumbnail.png');
-        console.log('Thumbnail path:', thumbnailPath);
+        const thumbnailPath = path.join(outputFolder, `${user}.png`);
 
         const thumbnailBuffer = await new Promise((resolve, reject) => {
             ffmpeg(videoUrl)
@@ -96,68 +97,70 @@ const cloud_Thumbnail_Generator = async (videoUrl) => {
                 .on('error', (err) => reject(err))
                 .inputOptions('-ss', timeOffset) // Seek to the 10% frame
                 .outputOptions(['-vframes 1', '-vf', `scale=${width}:${height}`])
-                // .outputOptions(['-vframes 1', `-vf scale=${width}:${height}`])
-                .output(thumbnailPath) // Specify the output file path directly
+                .output(thumbnailPath)
                 .run();
         });
 
-
-        // await new Promise((resolve, reject) => {
-        //     ffmpeg(videoUrl)
-        //     // .setFfmpegPath('/path/to/ffmpeg') // Update with the correct path to ffmpeg executable
-        //     .input(videoUrl)
-        //     .on('end', () => resolve())
-        //     .on('error', (err) => reject(err))
-        //     .outputOptions('-vf', 'thumbnail,scale=320:240')
-        //     .outputOptions('-frames:v 1')
-        //     .output(thumbnailPath);
-        // });
-
-        console.log('Thumbnail generated successfully!');
-
         // Upload thumbnail to Cloudinary
         const uploadResult = await cloudinary.uploader.upload(thumbnailPath, {
-            folder: 'thumbnails'
+            folder: folder
         });
 
         // Extract URL and public ID from the upload result
         const thumbnailUrl = uploadResult.secure_url;
         const thumbnailPublicId = uploadResult.public_id;
 
+        // Delete local thumbnail file after successful upload
+        fs.unlinkSync(thumbnailPath);
+
+
         // Return the URL and public ID of the uploaded thumbnail
         return { url: thumbnailUrl, public_id: thumbnailPublicId };
     } catch (error) {
-        console.error('Error generating thumbnail:', error);
         return null;
     }
 }
 
-
-async function processVideo(video) {
-    const thumbnailUrl = await cloud_Thumbnail_Generator(video.url);
+// Function For Processing Single Video
+async function processVideo(video, folder = 'socio', user = 'temporary') {
+    const thumbnailUrl = await cloud_Thumbnail_Generator(video.url, folder, user);
     if (thumbnailUrl) {
         video.thumbnailUrl = thumbnailUrl;
     }
     return video;
 }
 
-async function processVideos(videoArray) {
+// Function For Processing Video Array
+async function processVideos(videoArray, folder = 'socio', user = 'temporary') {
     const processedVideos = [];
     for (const video of videoArray) {
-        const processedVideo = await processVideo(video);
+        const processedVideo = await processVideo(video, folder, user);
         processedVideos.push(processedVideo);
     }
     return processedVideos;
 }
 
-const videoProcessingService = async (files) => {
+// Video Processing Video Entry Point
+const videoProcessingService = async (files, user = 'temporary') => {
     try {
-        const videos = await cloud_Video_Uploader(files);
-        const processedVideos = await processVideos(videos.results);
-        console.log('Processed videos:', processedVideos);
+        // Validate user ID
+        if (user && typeof user !== 'string') {
+            return res.status(400).json({ success: false, message: `Provide user unique ID!` })
+        }
+
+        // Define folder path based on user ID
+        const folder = user ? 'socio/' + user : 'socio/';
+
+        // Upload videos to Cloudinary
+        const videos = await cloud_Video_Uploader(files, folder);
+
+        // Process uploaded videos
+        const processedVideos = await processVideos(videos.results, folder, user);
+
+        // Return success message and processed videos
         return { success: true, message: 'Video processing completed', processedVideos };
     } catch (error) {
-        console.error('Error processing videos:', error);
+        // Return error message if any exception occurs
         return { success: false, message: 'An error occurred during video processing' };
     }
 }
